@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DEMO — Sports Live Scores</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-base: #060B18;
+  --bg-card: #0D1526;
+  --bg-elevated: #142035;
+  --bg-glass: rgba(13, 21, 38, 0.7);
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-glow: rgba(0, 212, 255, 0.3);
+  --accent-cyan: #00D4FF;
+  --accent-green: #00FF87;
+  --accent-amber: #FFB800;
+  --accent-red: #FF4757;
+  --accent-purple: #9D4EDD;
+  --text-primary: #F0F4FF;
+  --text-secondary: #8B9CC8;
+  --text-muted: #4A5578;
+  --text-score: #FFFFFF;
+}
+
+.light-mode {
+  --bg-base: #F0F4FF;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #E8ECF4;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --border-subtle: rgba(0,0,0,0.08);
+  --border-glow: rgba(0, 150, 200, 0.3);
+  --text-primary: #0D1526;
+  --text-secondary: #4A5578;
+  --text-muted: #8B9CC8;
+  --text-score: #060B18;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+.font-display { font-family: 'Space Grotesk', sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+.bg-grid {
+  background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.glass-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.15s ease;
+}
+.glass-card:hover {
+  border-color: var(--border-glow);
+  transform: translateY(-2px);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #00D4FF, #9D4EDD);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes pulse-live {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 135, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(0, 255, 135, 0); }
+}
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); color: #00FF87; }
+  100% { transform: scale(1); }
+}
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes slide-in { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:translateX(0); } }
+
+.animate-fade-up { animation: fade-up 0.5s ease forwards; }
+.animate-score-pop { animation: score-pop 0.6s ease; }
+.animate-pulse-live { animation: pulse-live 2s infinite; }
+.ticker-animate { animation: ticker-scroll 30s linear infinite; }
+
+.stat-bar-fill { transition: width 0.8s ease; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useReducer, useContext, createContext, useEffect, useRef, useMemo, useCallback } = React;
+
+// ==================== MOCK DATA ====================
+const SPORTS = [
+  { id: 'football', label: 'Football', emoji: '⚽' },
+  { id: 'basketball', label: 'Basketball', emoji: '🏀' },
+  { id: 'tennis', label: 'Tennis', emoji: '🎾' },
+  { id: 'cricket', label: 'Cricket', emoji: '🏏' },
+  { id: 'hockey', label: 'Ice Hockey', emoji: '🏒' },
+  { id: 'baseball', label: 'Baseball', emoji: '⚾' },
+  { id: 'rugby', label: 'Rugby', emoji: '🏉' },
+  { id: 'volleyball', label: 'Volleyball', emoji: '🏐' },
+];
+
+const COMPETITIONS = {
+  ucl: { id: 'ucl', name: 'UEFA Champions League', country: 'Europe', logo: '⭐', color: '#1F2A63', sport: 'football' },
+  epl: { id: 'epl', name: 'Premier League', country: 'England', logo: '🏴', color: '#3D195B', sport: 'football' },
+  laliga: { id: 'laliga', name: 'La Liga', country: 'Spain', logo: '🇪🇸', color: '#EE8707', sport: 'football' },
+  bundesliga: { id: 'bundesliga', name: 'Bundesliga', country: 'Germany', logo: '🇩🇪', color: '#D20515', sport: 'football' },
+  seriea: { id: 'seriea', name: 'Serie A', country: 'Italy', logo: '🇮🇹', color: '#024494', sport: 'football' },
+  nba: { id: 'nba', name: 'NBA', country: 'USA', logo: '🇺🇸', color: '#1D428A', sport: 'basketball' },
+};
+
+const TEAMS = {
+  man_city: { id:'man_city', name:'Manchester City', shortName:'MCI', color:'#6CABDD', country:'England', logo:'🔵', stadium:'Etihad Stadium', founded:1880, manager:'Pep Guardiola' },
+  real_madrid: { id:'real_madrid', name:'Real Madrid', shortName:'RMA', color:'#FEBE10', country:'Spain', logo:'⚪', stadium:'Santiago Bernabéu', founded:1902, manager:'Carlo Ancelotti' },
+  barcelona: { id:'barcelona', name:'Barcelona', shortName:'BAR', color:'#A50044', country:'Spain', logo:'🔴', stadium:'Camp Nou', founded:1899, manager:'Xavi Hernández' },
+  liverpool: { id:'liverpool', name:'Liverpool', shortName:'LIV', color:'#C8102E', country:'England', logo:'🔴', stadium:'Anfield', founded:1892, manager:'Arne Slot' },
+  arsenal: { id:'arsenal', name:'Arsenal', shortName:'ARS', color:'#EF0107', country:'England', logo:'🔴', stadium:'Emirates Stadium', founded:1886, manager:'Mikel Arteta' },
+  chelsea: { id:'chelsea', name:'Chelsea', shortName:'CHE', color:'#034694', country:'England', logo:'🔵', stadium:'Stamford Bridge', founded:1905, manager:'Enzo Maresca' },
+  psg: { id:'psg', name:'Paris Saint-Germain', shortName:'PSG', color:'#004170', country:'France', logo:'🔵', stadium:'Parc des Princes', founded:1970, manager:'Luis Enrique' },
+  bayern: { id:'bayern', name:'Bayern Munich', shortName:'BAY', color:'#DC052D', country:'Germany', logo:'🔴', stadium:'Allianz Arena', founded:1900, manager:'Vincent Kompany' },
+  juventus: { id:'juventus', name:'Juventus', shortName:'JUV', color:'#000000', country:'Italy', logo:'⚫', stadium:'Allianz Stadium', founded:1897, manager:'Thiago Motta' },
+  ac_milan: { id:'ac_milan', name:'AC Milan', shortName:'MIL', color:'#FB090B', country:'Italy', logo:'🔴', stadium:'San Siro', founded:1899, manager:'Paulo Fonseca' },
+  inter_milan: { id:'inter_milan', name:'Inter Milan', shortName:'INT', color:'#0068A8', country:'Italy', logo:'🔵', stadium:'San Siro', founded:1908, manager:'Simone Inzaghi' },
+  napoli: { id:'napoli', name:'Napoli', shortName:'NAP', color:'#12A0D7', country:'Italy', logo:'🔵', stadium:'Diego Armando Maradona', founded:1926, manager:'Antonio Conte' },
+  atletico: { id:'atletico', name:'Atlético Madrid', shortName:'ATM', color:'#CB3524', country:'Spain', logo:'🔴', stadium:'Metropolitano', founded:1903, manager:'Diego Simeone' },
+  dortmund: { id:'dortmund', name:'Borussia Dortmund', shortName:'BVB', color:'#FDE100', country:'Germany', logo:'🟡', stadium:'Signal Iduna Park', founded:1909, manager:'Nuri Şahin' },
+  tottenham: { id:'tottenham', name:'Tottenham Hotspur', shortName:'TOT', color:'#132257', country:'England', logo:'⚪', stadium:'Tottenham Hotspur Stadium', founded:1882, manager:'Ange Postecoglou' },
+  man_united: { id:'man_united', name:'Manchester United', shortName:'MUN', color:'#DA291C', country:'England', logo:'🔴', stadium:'Old Trafford', founded:1878, manager:'Ruben Amorim' },
+  newcastle: { id:'newcastle', name:'Newcastle United', shortName:'NEW', color:'#241F20', country:'England', logo:'⚫', stadium:'St James Park', founded:1892, manager:'Eddie Howe' },
+  aston_villa: { id:'aston_villa', name:'Aston Villa', shortName:'AVL', color:'#670E36', country:'England', logo:'🟤', stadium:'Villa Park', founded:1874, manager:'Unai Emery' },
+  west_ham: { id:'west_ham', name:'West Ham United', shortName:'WHU', color:'#7A263A', country:'England', logo:'🟤', stadium:'London Stadium', founded:1895, manager:'Julen Lopetegui' },
+  brighton: { id:'brighton', name:'Brighton & Hove Albion', shortName:'BHA', color:'#0057B8', country:'England', logo:'🔵', stadium:'Amex Stadium', founded:1901, manager:'Fabian Hürzeler' },
+  rb_leipzig: { id:'rb_leipzig', name:'RB Leipzig', shortName:'RBL', color:'#DD0741', country:'Germany', logo:'🔴', stadium:'Red Bull Arena', founded:2009, manager:'Marco Rose' },
+  leverkusen: { id:'leverkusen', name:'Bayer Leverkusen', shortName:'B04', color:'#E32221', country:'Germany', logo:'🔴', stadium:'BayArena', founded:1904, manager:'Xabi Alonso' },
+  roma: { id:'roma', name:'AS Roma', shortName:'ROM', color:'#8E1F2F', country:'Italy', logo:'🟤', stadium:'Stadio Olimpico', founded:1927, manager:'Daniele De Rossi' },
+  lazio: { id:'lazio', name:'Lazio', shortName:'LAZ', color:'#87D8F7', country:'Italy', logo:'🔵', stadium:'Stadio Olimpico', founded:1900, manager:'Igor Tudor' },
+  sevilla: { id:'sevilla', name:'Sevilla', shortName:'SEV', color:'#D4021D', country:'Spain', logo:'🔴', stadium:'Ramón Sánchez-Pizjuán', founded:1890, manager:'Quique Sánchez Flores' },
+  sociedad: { id:'sociedad', name:'Real Sociedad', shortName:'RSO', color:'#143C8B', country:'Spain', logo:'🔵', stadium:'Reale Arena', founded:1909, manager:'Imanol Alguacil' },
+  lakers: { id:'lakers', name:'LA Lakers', shortName:'LAL', color:'#552583', country:'USA', logo:'🟡', stadium:'Crypto.com Arena', founded:1947, manager:'JJ Redick' },
+  celtics: { id:'celtics', name:'Boston Celtics', shortName:'BOS', color:'#007A33', country:'USA', logo:'🟢', stadium:'TD Garden', founded:1946, manager:'Joe Mazzulla' },
+  warriors: { id:'warriors', name:'Golden State Warriors', shortName:'GSW', color:'#1D428A', country:'USA', logo:'🔵', stadium:'Chase Center', founded:1946, manager:'Steve Kerr' },
+  bucks: { id:'bucks', name:'Milwaukee Bucks', shortName:'MIL', color:'#00471B', country:'USA', logo:'🟢', stadium:'Fiserv Forum', founded:1968, manager:'Doc Rivers' },
+  nuggets: { id:'nuggets', name:'Denver Nuggets', shortName:'DEN', color:'#0E2240', country:'USA', logo:'🔵', stadium:'Ball Arena', founded:1967, manager:'Michael Malone' },
+  wolves: { id:'wolves', name:'Wolverhampton', shortName:'WOL', color:'#FDB913', country:'England', logo:'🟡', stadium:'Molineux', founded:1877, manager:'Gary O\'Neill' },
+};
+
+const makeLineup = (t, formation) => ({
+  formation,
+  players: [
+    { number: 1, name: 'Goalkeeper', position: 'GK', rating: 6.8 },
+    { number: 2, name: 'Right Back', position: 'RB', rating: 6.9 },
+    { number: 4, name: 'Center Back', position: 'CB', rating: 7.0 },
+    { number: 5, name: 'Center Back', position: 'CB', rating: 7.1 },
+    { number: 3, name: 'Left Back', position: 'LB', rating: 6.7 },
+    { number: 6, name: 'Midfielder', position: 'CM', rating: 7.3 },
+    { number: 8, name: 'Midfielder', position: 'CM', rating: 7.5 },
+    { number: 10, name: 'Midfielder', position: 'CM', rating: 7.8 },
+    { number: 7, name: 'Right Wing', position: 'RW', rating: 7.2 },
+    { number: 9, name: 'Striker', position: 'ST', rating: 7.6 },
+    { number: 11, name: 'Left Wing', position: 'LW', rating: 7.0 },
+  ]
+});
+
+const MATCHES = [
+  // UCL
+  {
+    id: 'm1', sport: 'football', status: 'LIVE', minute: 67,
+    homeTeam: TEAMS.man_city, awayTeam: TEAMS.real_madrid,
+    homeScore: 2, awayScore: 1,
+    competition: COMPETITIONS.ucl, venue: 'Etihad Stadium, Manchester',
+    date: '2026-06-11', time: '20:45', isFeatured: true,
+    stats: { possession:[62,38], shots:[14,7], shotsOnTarget:[6,3], corners:[8,4], fouls:[10,14], yellowCards:[1,2], redCards:[0,0], passes:[623,389], passAccuracy:[91,84], xG:[2.3,0.9], offsides:[3,1], saves:[2,5] },
+    events: [
+      { minute:23, type:'goal', team:'home', player:'Erling Haaland', assist:'Kevin De Bruyne' },
+      { minute:38, type:'yellow_card', team:'away', player:'Luka Modrić' },
+      { minute:51, type:'goal', team:'away', player:'Vinícius Jr.', assist:'Jude Bellingham' },
+      { minute:63, type:'goal', team:'home', player:'Phil Foden', assist:'Rodri' },
+      { minute:67, type:'substitution', team:'home', playerOff:'Bernardo Silva', playerOn:'Jack Grealish' },
+    ],
+    lineups: {
+      home: { formation:'4-3-3', players:[
+        {number:31,name:'Ederson',position:'GK',rating:7.1},{number:2,name:'Kyle Walker',position:'RB',rating:6.8},{number:3,name:'Rúben Dias',position:'CB',rating:7.4},{number:5,name:'John Stones',position:'CB',rating:7.0},{number:6,name:'Joško Gvardiol',position:'LB',rating:7.2},{number:16,name:'Rodri',position:'CM',rating:8.1},{number:17,name:'Kevin De Bruyne',position:'CM',rating:8.7,hasAssist:true},{number:20,name:'Bernardo Silva',position:'CM',rating:7.3},{number:47,name:'Phil Foden',position:'LW',rating:8.4,hasGoal:true},{number:9,name:'Erling Haaland',position:'ST',rating:8.9,hasGoal:true},{number:26,name:'Riyad Mahrez',position:'RW',rating:7.0}
+      ]},
+      away: { formation:'4-3-3', players:[
+        {number:1,name:'Thibaut Courtois',position:'GK',rating:7.8},{number:2,name:'Dani Carvajal',position:'RB',rating:6.9},{number:4,name:'David Alaba',position:'CB',rating:7.0},{number:5,name:'Éder Militão',position:'CB',rating:7.1},{number:23,name:'Ferland Mendy',position:'LB',rating:6.7},{number:10,name:'Luka Modrić',position:'CM',rating:7.5,hasYellow:true},{number:8,name:'Toni Kroos',position:'CM',rating:7.9},{number:14,name:'Jude Bellingham',position:'CM',rating:8.3,hasAssist:true},{number:7,name:'Vinícius Jr.',position:'LW',rating:8.6,hasGoal:true},{number:9,name:'Karim Benzema',position:'ST',rating:7.2},{number:11,name:'Rodrygo',position:'RW',rating:7.0}
+      ]}
+    },
+    h2h: [
+      {date:'2024-04-17',home:'Manchester City',away:'Real Madrid',score:'1-1',result:'D'},
+      {date:'2023-05-09',home:'Real Madrid',away:'Manchester City',score:'1-1',result:'D'},
+      {date:'2022-04-26',home:'Real Madrid',away:'Manchester City',score:'3-1',result:'H'},
+      {date:'2022-04-05',home:'Manchester City',away:'Real Madrid',score:'4-3',result:'H'},
+      {date:'2020-08-07',home:'Manchester City',away:'Real Madrid',score:'2-1',result:'H'},
+    ],
+    commentary: [
+      {minute:67,text:'Substitution for City. Grealish replaces Bernardo Silva.'},
+      {minute:63,text:'GOAL! Phil Foden fires home from the edge of the box! City lead again!'},
+      {minute:58,text:'Real Madrid pressing high now, looking for the equalizer.'},
+      {minute:51,text:'GOAL! Vinícius Jr. with a brilliant solo run and finish! Game on!'},
+      {minute:45,text:'Half time. Manchester City lead 1-0 through Haaland.'},
+      {minute:38,text:'Yellow card for Modrić after a late challenge on De Bruyne.'},
+      {minute:23,text:'GOAL! Haaland heads in from De Bruyne\'s perfect cross!'},
+      {minute:12,text:'Real Madrid with some early possession but City looking dangerous on the counter.'},
+      {minute:1,text:'Kick off! We are underway at the Etihad Stadium.'},
+    ]
+  },
+  {
+    id:'m2', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.barcelona, awayTeam:TEAMS.psg,
+    homeScore:3, awayScore:2, competition:COMPETITIONS.ucl,
+    venue:'Camp Nou, Barcelona', date:'2026-06-10', time:'20:45', isFeatured:false,
+    stats:{possession:[58,42],shots:[16,9],shotsOnTarget:[7,4],corners:[7,3],fouls:[12,15],yellowCards:[2,3],redCards:[0,0],passes:[567,412],passAccuracy:[88,82],xG:[2.8,1.5],offsides:[2,3],saves:[2,4]},
+    events:[{minute:15,type:'goal',team:'home',player:'Robert Lewandowski',assist:'Pedri'},{minute:34,type:'goal',team:'away',player:'Ousmane Dembélé'},{minute:52,type:'goal',team:'home',player:'Lamine Yamal'},{minute:68,type:'goal',team:'away',player:'Bradley Barcola'},{minute:82,type:'goal',team:'home',player:'Raphinha',assist:'Lamine Yamal'}],
+    lineups:{home:makeLineup('BAR','4-3-3'),away:makeLineup('PSG','4-3-3')},
+    h2h:[{date:'2024-04-16',home:'Barcelona',away:'PSG',score:'3-2',result:'H'},{date:'2024-04-10',home:'PSG',away:'Barcelona',score:'2-3',result:'A'},{date:'2021-03-10',home:'PSG',away:'Barcelona',score:'1-1',result:'D'}],
+    commentary:[]
+  },
+  {
+    id:'m3', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.bayern, awayTeam:TEAMS.inter_milan,
+    homeScore:1, awayScore:0, competition:COMPETITIONS.ucl,
+    venue:'Allianz Arena, Munich', date:'2026-06-10', time:'20:45', isFeatured:false,
+    stats:{possession:[64,36],shots:[18,5],shotsOnTarget:[8,2],corners:[9,2],fouls:[8,11],yellowCards:[1,3],redCards:[0,0],passes:[645,356],passAccuracy:[92,80],xG:[2.1,0.4],offsides:[1,2],saves:[2,7]},
+    events:[{minute:72,type:'goal',team:'home',player:'Harry Kane',assist:'Jamal Musiala'}],
+    lineups:{home:makeLineup('BAY','4-2-3-1'),away:makeLineup('INT','3-5-2')},
+    h2h:[], commentary:[]
+  },
+  // EPL
+  {
+    id:'m4', sport:'football', status:'LIVE', minute:34,
+    homeTeam:TEAMS.arsenal, awayTeam:TEAMS.chelsea,
+    homeScore:1, awayScore:0, competition:COMPETITIONS.epl,
+    venue:'Emirates Stadium, London', date:'2026-06-11', time:'17:30', isFeatured:false,
+    stats:{possession:[56,44],shots:[8,5],shotsOnTarget:[3,2],corners:[4,3],fouls:[7,9],yellowCards:[1,1],redCards:[0,0],passes:[312,256],passAccuracy:[89,85],xG:[1.2,0.6],offsides:[1,0],saves:[2,2]},
+    events:[{minute:22,type:'goal',team:'home',player:'Bukayo Saka',assist:'Martin Ødegaard'},{minute:30,type:'yellow_card',team:'away',player:'Enzo Fernández'}],
+    lineups:{home:makeLineup('ARS','4-3-3'),away:makeLineup('CHE','4-2-3-1')},
+    h2h:[], commentary:[{minute:34,text:'Arsenal controlling the tempo now.'},{minute:30,text:'Yellow card for Enzo Fernández.'},{minute:22,text:'GOAL! Saka cuts inside and curls one into the far corner!'}]
+  },
+  {
+    id:'m5', sport:'football', status:'LIVE', minute:52,
+    homeTeam:TEAMS.liverpool, awayTeam:TEAMS.man_united,
+    homeScore:2, awayScore:1, competition:COMPETITIONS.epl,
+    venue:'Anfield, Liverpool', date:'2026-06-11', time:'17:30', isFeatured:false,
+    stats:{possession:[54,46],shots:[11,8],shotsOnTarget:[5,3],corners:[6,4],fouls:[9,11],yellowCards:[1,2],redCards:[0,0],passes:[398,345],passAccuracy:[87,83],xG:[1.8,1.1],offsides:[2,1],saves:[2,3]},
+    events:[{minute:11,type:'goal',team:'home',player:'Mohamed Salah'},{minute:28,type:'goal',team:'away',player:'Marcus Rashford'},{minute:48,type:'goal',team:'home',player:'Darwin Núñez',assist:'Trent Alexander-Arnold'}],
+    lineups:{home:makeLineup('LIV','4-3-3'),away:makeLineup('MUN','4-2-3-1')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m6', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.tottenham, awayTeam:TEAMS.newcastle,
+    homeScore:1, awayScore:1, competition:COMPETITIONS.epl,
+    venue:'Tottenham Hotspur Stadium', date:'2026-06-10', time:'15:00', isFeatured:false,
+    stats:{possession:[52,48],shots:[12,10],shotsOnTarget:[4,4],corners:[5,6],fouls:[11,10],yellowCards:[2,2],redCards:[0,0],passes:[456,423],passAccuracy:[85,83],xG:[1.3,1.2],offsides:[2,3],saves:[3,3]},
+    events:[{minute:35,type:'goal',team:'home',player:'Son Heung-min'},{minute:71,type:'goal',team:'away',player:'Alexander Isak'}],
+    lineups:{home:makeLineup('TOT','4-3-3'),away:makeLineup('NEW','4-3-3')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m7', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.aston_villa, awayTeam:TEAMS.west_ham,
+    homeScore:2, awayScore:0, competition:COMPETITIONS.epl,
+    venue:'Villa Park, Birmingham', date:'2026-06-10', time:'15:00', isFeatured:false,
+    stats:{possession:[60,40],shots:[15,6],shotsOnTarget:[6,2],corners:[7,3],fouls:[8,13],yellowCards:[0,3],redCards:[0,0],passes:[512,342],passAccuracy:[90,81],xG:[2.0,0.5],offsides:[1,2],saves:[2,4]},
+    events:[{minute:28,type:'goal',team:'home',player:'Ollie Watkins'},{minute:65,type:'goal',team:'home',player:'Ollie Watkins',assist:'Leon Bailey'}],
+    lineups:{home:makeLineup('AVL','4-3-3'),away:makeLineup('WHU','4-2-3-1')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m8', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.brighton, awayTeam:TEAMS.wolves,
+    homeScore:3, awayScore:1, competition:COMPETITIONS.epl,
+    venue:'Amex Stadium, Brighton', date:'2026-06-10', time:'15:00', isFeatured:false,
+    stats:{possession:[63,37],shots:[17,6],shotsOnTarget:[8,3],corners:[8,2],fouls:[7,12],yellowCards:[1,2],redCards:[0,0],passes:[589,345],passAccuracy:[91,79],xG:[2.5,0.7],offsides:[0,2],saves:[2,5]},
+    events:[{minute:12,type:'goal',team:'home',player:'Kaoru Mitoma'},{minute:45,type:'goal',team:'away',player:'Matheus Cunha'},{minute:58,type:'goal',team:'home',player:'João Pedro'},{minute:78,type:'goal',team:'home',player:'Evan Ferguson'}],
+    lineups:{home:makeLineup('BHA','4-2-3-1'),away:makeLineup('WOL','3-4-3')},
+    h2h:[], commentary:[]
+  },
+  // La Liga
+  {
+    id:'m9', sport:'football', status:'LIVE', minute:71,
+    homeTeam:TEAMS.atletico, awayTeam:TEAMS.sevilla,
+    homeScore:2, awayScore:0, competition:COMPETITIONS.laliga,
+    venue:'Metropolitano, Madrid', date:'2026-06-11', time:'21:00', isFeatured:false,
+    stats:{possession:[55,45],shots:[13,6],shotsOnTarget:[5,2],corners:[6,3],fouls:[14,10],yellowCards:[3,2],redCards:[0,0],passes:[478,398],passAccuracy:[86,82],xG:[1.9,0.5],offsides:[2,1],saves:[2,3]},
+    events:[{minute:33,type:'goal',team:'home',player:'Antoine Griezmann'},{minute:61,type:'goal',team:'home',player:'Álvaro Morata',assist:'Antoine Griezmann'}],
+    lineups:{home:makeLineup('ATM','4-4-2'),away:makeLineup('SEV','4-3-3')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m10', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.real_madrid, awayTeam:TEAMS.sociedad,
+    homeScore:4, awayScore:1, competition:COMPETITIONS.laliga,
+    venue:'Santiago Bernabéu, Madrid', date:'2026-06-10', time:'21:00', isFeatured:false,
+    stats:{possession:[66,34],shots:[20,7],shotsOnTarget:[9,3],corners:[10,2],fouls:[8,13],yellowCards:[1,2],redCards:[0,0],passes:[678,312],passAccuracy:[93,78],xG:[3.2,0.8],offsides:[2,3],saves:[2,7]},
+    events:[{minute:8,type:'goal',team:'home',player:'Vinícius Jr.'},{minute:25,type:'goal',team:'home',player:'Jude Bellingham'},{minute:55,type:'goal',team:'away',player:'Mikel Oyarzabal'},{minute:67,type:'goal',team:'home',player:'Vinícius Jr.',assist:'Luka Modrić'},{minute:80,type:'goal',team:'home',player:'Rodrygo'}],
+    lineups:{home:makeLineup('RMA','4-3-3'),away:makeLineup('RSO','4-3-3')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m11', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.barcelona, awayTeam:TEAMS.atletico,
+    homeScore:2, awayScore:2, competition:COMPETITIONS.laliga,
+    venue:'Camp Nou, Barcelona', date:'2026-06-09', time:'21:00', isFeatured:false,
+    stats:{possession:[61,39],shots:[16,9],shotsOnTarget:[6,4],corners:[8,3],fouls:[10,16],yellowCards:[1,4],redCards:[0,0],passes:[612,378],passAccuracy:[90,82],xG:[2.1,1.5],offsides:[3,1],saves:[2,4]},
+    events:[{minute:18,type:'goal',team:'home',player:'Robert Lewandowski'},{minute:40,type:'goal',team:'away',player:'Antoine Griezmann'},{minute:56,type:'goal',team:'home',player:'Pedri'},{minute:88,type:'goal',team:'away',player:'Álvaro Morata'}],
+    lineups:{home:makeLineup('BAR','4-3-3'),away:makeLineup('ATM','4-4-2')},
+    h2h:[], commentary:[]
+  },
+  // Bundesliga
+  {
+    id:'m12', sport:'football', status:'HT', minute:45,
+    homeTeam:TEAMS.dortmund, awayTeam:TEAMS.rb_leipzig,
+    homeScore:1, awayScore:1, competition:COMPETITIONS.bundesliga,
+    venue:'Signal Iduna Park, Dortmund', date:'2026-06-11', time:'18:30', isFeatured:false,
+    stats:{possession:[48,52],shots:[7,8],shotsOnTarget:[3,3],corners:[4,5],fouls:[6,7],yellowCards:[1,1],redCards:[0,0],passes:[267,289],passAccuracy:[84,86],xG:[0.9,1.0],offsides:[1,2],saves:[2,2]},
+    events:[{minute:20,type:'goal',team:'home',player:'Julian Brandt'},{minute:38,type:'goal',team:'away',player:'Loïs Openda'}],
+    lineups:{home:makeLineup('BVB','4-2-3-1'),away:makeLineup('RBL','4-4-2')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m13', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.bayern, awayTeam:TEAMS.leverkusen,
+    homeScore:2, awayScore:2, competition:COMPETITIONS.bundesliga,
+    venue:'Allianz Arena, Munich', date:'2026-06-10', time:'18:30', isFeatured:false,
+    stats:{possession:[56,44],shots:[15,12],shotsOnTarget:[6,5],corners:[7,5],fouls:[9,10],yellowCards:[2,1],redCards:[0,0],passes:[534,423],passAccuracy:[89,85],xG:[1.8,1.7],offsides:[2,1],saves:[3,4]},
+    events:[{minute:14,type:'goal',team:'home',player:'Harry Kane'},{minute:30,type:'goal',team:'away',player:'Florian Wirtz'},{minute:55,type:'goal',team:'home',player:'Jamal Musiala'},{minute:89,type:'goal',team:'away',player:'Florian Wirtz'}],
+    lineups:{home:makeLineup('BAY','4-2-3-1'),away:makeLineup('B04','3-4-3')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m14', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.rb_leipzig, awayTeam:TEAMS.dortmund,
+    homeScore:0, awayScore:2, competition:COMPETITIONS.bundesliga,
+    venue:'Red Bull Arena, Leipzig', date:'2026-06-09', time:'15:30', isFeatured:false,
+    stats:{possession:[53,47],shots:[10,13],shotsOnTarget:[3,6],corners:[5,6],fouls:[11,8],yellowCards:[2,1],redCards:[0,0],passes:[467,412],passAccuracy:[86,84],xG:[0.8,1.9],offsides:[3,1],saves:[4,3]},
+    events:[{minute:42,type:'goal',team:'away',player:'Julian Brandt'},{minute:76,type:'goal',team:'away',player:'Karim Adeyemi'}],
+    lineups:{home:makeLineup('RBL','4-4-2'),away:makeLineup('BVB','4-2-3-1')},
+    h2h:[], commentary:[]
+  },
+  // Serie A
+  {
+    id:'m15', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.napoli, awayTeam:TEAMS.juventus,
+    homeScore:2, awayScore:1, competition:COMPETITIONS.seriea,
+    venue:'Diego Armando Maradona, Naples', date:'2026-06-10', time:'20:45', isFeatured:false,
+    stats:{possession:[51,49],shots:[12,11],shotsOnTarget:[5,4],corners:[5,6],fouls:[13,12],yellowCards:[3,2],redCards:[0,0],passes:[445,432],passAccuracy:[84,85],xG:[1.6,1.3],offsides:[2,3],saves:[3,3]},
+    events:[{minute:25,type:'goal',team:'home',player:'Victor Osimhen'},{minute:58,type:'goal',team:'away',player:'Dušan Vlahović'},{minute:82,type:'goal',team:'home',player:'Khvicha Kvaratskhelia'}],
+    lineups:{home:makeLineup('NAP','4-3-3'),away:makeLineup('JUV','3-5-2')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m16', sport:'football', status:'FT', minute:90,
+    homeTeam:TEAMS.ac_milan, awayTeam:TEAMS.roma,
+    homeScore:1, awayScore:1, competition:COMPETITIONS.seriea,
+    venue:'San Siro, Milan', date:'2026-06-10', time:'18:00', isFeatured:false,
+    stats:{possession:[54,46],shots:[13,9],shotsOnTarget:[4,3],corners:[6,4],fouls:[10,12],yellowCards:[2,3],redCards:[0,0],passes:[489,398],passAccuracy:[87,83],xG:[1.4,1.0],offsides:[1,2],saves:[2,3]},
+    events:[{minute:37,type:'goal',team:'home',player:'Rafael Leão'},{minute:64,type:'goal',team:'away',player:'Paulo Dybala'}],
+    lineups:{home:makeLineup('MIL','4-2-3-1'),away:makeLineup('ROM','3-4-2-1')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m17', sport:'football', status:'NS', minute:0,
+    homeTeam:TEAMS.inter_milan, awayTeam:TEAMS.lazio,
+    homeScore:0, awayScore:0, competition:COMPETITIONS.seriea,
+    venue:'San Siro, Milan', date:'2026-06-12', time:'20:45', isFeatured:false,
+    stats:{possession:[50,50],shots:[0,0],shotsOnTarget:[0,0],corners:[0,0],fouls:[0,0],yellowCards:[0,0],redCards:[0,0],passes:[0,0],passAccuracy:[0,0],xG:[0,0],offsides:[0,0],saves:[0,0]},
+    events:[], lineups:{home:makeLineup('INT','3-5-2'),away:makeLineup('LAZ','4-3-3')},
+    h2h:[], commentary:[]
+  },
+  // NBA
+  {
+    id:'m18', sport:'basketball', status:'LIVE', minute:0,
+    homeTeam:TEAMS.lakers, awayTeam:TEAMS.celtics,
+    homeScore:98, awayScore:102, competition:COMPETITIONS.nba,
+    venue:'Crypto.com Arena, Los Angeles', date:'2026-06-11', time:'22:00', isFeatured:false,
+    quarter: 'Q4 4:32',
+    stats:{possession:[50,50],shots:[42,45],shotsOnTarget:[38,40],corners:[0,0],fouls:[18,15],yellowCards:[0,0],redCards:[0,0],passes:[0,0],passAccuracy:[0,0],xG:[0,0],offsides:[0,0],saves:[0,0]},
+    events:[{minute:0,type:'goal',team:'home',player:'LeBron James (32 pts)'},{minute:0,type:'goal',team:'away',player:'Jayson Tatum (28 pts)'}],
+    lineups:{home:makeLineup('LAL',''),away:makeLineup('BOS','')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m19', sport:'basketball', status:'FT', minute:0,
+    homeTeam:TEAMS.warriors, awayTeam:TEAMS.bucks,
+    homeScore:118, awayScore:112, competition:COMPETITIONS.nba,
+    venue:'Chase Center, San Francisco', date:'2026-06-10', time:'22:00', isFeatured:false,
+    stats:{possession:[50,50],shots:[44,41],shotsOnTarget:[40,38],corners:[0,0],fouls:[16,19],yellowCards:[0,0],redCards:[0,0],passes:[0,0],passAccuracy:[0,0],xG:[0,0],offsides:[0,0],saves:[0,0]},
+    events:[{minute:0,type:'goal',team:'home',player:'Stephen Curry (35 pts)'},{minute:0,type:'goal',team:'away',player:'Giannis Antetokounmpo (30 pts)'}],
+    lineups:{home:makeLineup('GSW',''),away:makeLineup('MIL','')},
+    h2h:[], commentary:[]
+  },
+  {
+    id:'m20', sport:'basketball', status:'FT', minute:0,
+    homeTeam:TEAMS.nuggets, awayTeam:TEAMS.lakers,
+    homeScore:121, awayScore:109, competition:COMPETITIONS.nba,
+    venue:'Ball Arena, Denver', date:'2026-06-09', time:'21:00', isFeatured:false,
+    stats:{possession:[50,50],shots:[46,40],shotsOnTarget:[42,37],corners:[0,0],fouls:[14,17],yellowCards:[0,0],redCards:[0,0],passes:[0,0],passAccuracy:[0,0],xG:[0,0],offsides:[0,0],saves:[0,0]},
+    events:[{minute:0,type:'goal',team:'home',player:'Nikola Jokić (Triple-double: 28-12-11)'}],
+    lineups:{home:makeLineup('DEN',''),away:makeLineup('LAL','')},
+    h2h:[], commentary:[]
+  },
+];
+
+const EPL_TABLE = [
+  {pos:1,team:'Manchester City',id:'man_city',played:35,won:26,drawn:5,lost:4,gf:82,ga:34,gd:48,pts:83,form:['W','W','W','D','W']},
+  {pos:2,team:'Arsenal',id:'arsenal',played:35,won:24,drawn:6,lost:5,gf:79,ga:29,gd:50,pts:78,form:['W','W','D','W','W']},
+  {pos:3,team:'Liverpool',id:'liverpool',played:35,won:23,drawn:7,lost:5,gf:75,ga:35,gd:40,pts:76,form:['W','D','W','W','L']},
+  {pos:4,team:'Aston Villa',id:'aston_villa',played:35,won:20,drawn:7,lost:8,gf:68,ga:42,gd:26,pts:67,form:['W','W','L','W','W']},
+  {pos:5,team:'Tottenham',id:'tottenham',played:35,won:19,drawn:5,lost:11,gf:65,ga:52,gd:13,pts:62,form:['D','W','L','W','D']},
+  {pos:6,team:'Chelsea',id:'chelsea',played:35,won:17,drawn:8,lost:10,gf:62,ga:48,gd:14,pts:59,form:['L','W','W','D','W']},
+  {pos:7,team:'Newcastle',id:'newcastle',played:35,won:17,drawn:6,lost:12,gf:61,ga:49,gd:12,pts:57,form:['D','D','W','L','W']},
+  {pos:8,team:'Manchester United',id:'man_united',played:35,won:16,drawn:5,lost:14,gf:50,ga:52,gd:-2,pts:53,form:['L','W','L','W','W']},
+  {pos:9,team:'West Ham',id:'west_ham',played:35,won:14,drawn:8,lost:13,gf:52,ga:55,gd:-3,pts:50,form:['L','D','W','L','D']},
+  {pos:10,team:'Brighton',id:'brighton',played:35,won:14,drawn:7,lost:14,gf:53,ga:51,gd:2,pts:49,form:['W','W','W','L','D']},
+  {pos:11,team:'Wolverhampton',id:'wolves',played:35,won:13,drawn:6,lost:16,gf:45,ga:55,gd:-10,pts:45,form:['L','L','W','D','W']},
+  {pos:12,team:'Bournemouth',id:'bournemouth',played:35,won:12,drawn:8,lost:15,gf:48,ga:56,gd:-8,pts:44,form:['D','W','L','L','W']},
+  {pos:13,team:'Fulham',id:'fulham',played:35,won:12,drawn:7,lost:16,gf:46,ga:52,gd:-6,pts:43,form:['W','L','D','W','L']},
+  {pos:14,team:'Crystal Palace',id:'crystal_palace',played:35,won:11,drawn:8,lost:16,gf:42,ga:53,gd:-11,pts:41,form:['D','L','W','W','L']},
+  {pos:15,team:'Brentford',id:'brentford',played:35,won:10,drawn:8,lost:17,gf:45,ga:58,gd:-13,pts:38,form:['L','D','L','W','D']},
+  {pos:16,team:'Everton',id:'everton',played:35,won:10,drawn:7,lost:18,gf:36,ga:51,gd:-15,pts:37,form:['L','L','D','W','L']},
+  {pos:17,team:'Nottm Forest',id:'nottm_forest',played:35,won:9,drawn:8,lost:18,gf:38,ga:56,gd:-18,pts:35,form:['D','L','L','D','W']},
+  {pos:18,team:'Luton Town',id:'luton',played:35,won:6,drawn:7,lost:22,gf:38,ga:72,gd:-34,pts:25,form:['L','L','L','D','L']},
+  {pos:19,team:'Burnley',id:'burnley',played:35,won:5,drawn:7,lost:23,gf:30,ga:68,gd:-38,pts:22,form:['L','D','L','L','L']},
+  {pos:20,team:'Sheffield United',id:'sheffield',played:35,won:3,drawn:6,lost:26,gf:25,ga:82,gd:-57,pts:15,form:['L','L','L','L','D']},
+];
+
+const TOP_SCORERS = [
+  {rank:1,player:'Erling Haaland',team:'Manchester City',teamId:'man_city',goals:27,assists:8,matches:33},
+  {rank:2,player:'Harry Kane',team:'Bayern Munich',teamId:'bayern',goals:24,assists:12,matches:32},
+  {rank:3,player:'Vinícius Jr.',team:'Real Madrid',teamId:'real_madrid',goals:22,assists:10,matches:34},
+  {rank:4,player:'Mohamed Salah',team:'Liverpool',teamId:'liverpool',goals:21,assists:13,matches:33},
+  {rank:5,player:'Bukayo Saka',team:'Arsenal',teamId:'arsenal',goals:18,assists:14,matches:34},
+  {rank:6,player:'Robert Lewandowski',team:'Barcelona',teamId:'barcelona',goals:18,assists:6,matches:31},
+  {rank:7,player:'Phil Foden',team:'Manchester City',teamId:'man_city',goals:17,assists:9,matches:32},
+  {rank:8,player:'Ollie Watkins',team:'Aston Villa',teamId:'aston_villa',goals:16,assists:11,matches:34},
+  {rank:9,player:'Alexander Isak',team:'Newcastle',teamId:'newcastle',goals:15,assists:5,matches:30},
+  {rank:10,player:'Florian Wirtz',team:'Bayer Leverkusen',teamId:'leverkusen',goals:14,assists:15,matches:33},
+];
+
+const PLAYERS = {
+  haaland: {id:'haaland',name:'Erling Haaland',team:'Manchester City',teamId:'man_city',position:'ST',nationality:'🇳🇴',age:25,number:9,stats:{goals:27,assists:8,matches:33,avgRating:8.2,xG:24.5,keyPasses:18,dribbles:22,tackles:5,interceptions:3,aerialWon:45,shooting:92,passing:65,dribbling:72,defending:20,pace:88,physical:90},recentMatches:[{vs:'Real Madrid',score:'2-1',rating:8.9,goals:1,assists:0},{vs:'Chelsea',score:'3-0',rating:7.8,goals:1,assists:1},{vs:'Newcastle',score:'1-1',rating:6.5,goals:0,assists:0},{vs:'Tottenham',score:'4-1',rating:9.2,goals:2,assists:1},{vs:'West Ham',score:'2-0',rating:7.4,goals:1,assists:0},{vs:'Brighton',score:'1-0',rating:6.8,goals:0,assists:0},{vs:'Arsenal',score:'0-1',rating:5.9,goals:0,assists:0},{vs:'Liverpool',score:'2-2',rating:7.6,goals:1,assists:0}]},
+  salah: {id:'salah',name:'Mohamed Salah',team:'Liverpool',teamId:'liverpool',position:'RW',nationality:'🇪🇬',age:33,number:11,stats:{goals:21,assists:13,matches:33,avgRating:7.9,xG:19.2,keyPasses:52,dribbles:48,tackles:12,interceptions:8,aerialWon:10,shooting:88,passing:78,dribbling:85,defending:35,pace:90,physical:68},recentMatches:[{vs:'Man United',score:'2-1',rating:8.1,goals:1,assists:0},{vs:'Everton',score:'2-0',rating:7.5,goals:0,assists:1},{vs:'Arsenal',score:'1-1',rating:7.0,goals:1,assists:0},{vs:'Chelsea',score:'3-1',rating:8.8,goals:2,assists:0}]},
+  saka: {id:'saka',name:'Bukayo Saka',team:'Arsenal',teamId:'arsenal',position:'RW',nationality:'🏴',age:24,number:7,stats:{goals:18,assists:14,matches:34,avgRating:7.8,xG:15.1,keyPasses:65,dribbles:62,tackles:18,interceptions:12,aerialWon:8,shooting:82,passing:80,dribbling:88,defending:45,pace:87,physical:62},recentMatches:[{vs:'Chelsea',score:'1-0',rating:8.4,goals:1,assists:0},{vs:'Man City',score:'0-1',rating:6.2,goals:0,assists:0}]},
+};
+
+// ==================== STATE MANAGEMENT ====================
+const initialState = {
+  currentPage: 'home',
+  selectedMatchId: null,
+  selectedLeagueId: null,
+  selectedTeamId: null,
+  selectedPlayerId: null,
+  activeSport: 'football',
+  activeDate: 'today',
+  activeMatchTab: 'summary',
+  activeLeagueTab: 'standings',
+  searchQuery: '',
+  favorites: [],
+  darkMode: true,
+  expandedLeagues: {},
+};
+
+function reducer(state, action) {
+  switch(action.type) {
+    case 'SET_PAGE': return {...state, currentPage: action.page};
+    case 'VIEW_MATCH': return {...state, currentPage:'match', selectedMatchId:action.id, activeMatchTab:'summary'};
+    case 'VIEW_LEAGUE': return {...state, currentPage:'league', selectedLeagueId:action.id, activeLeagueTab:'standings'};
+    case 'VIEW_TEAM': return {...state, currentPage:'team', selectedTeamId:action.id};
+    case 'VIEW_PLAYER': return {...state, currentPage:'player', selectedPlayerId:action.id};
+    case 'SET_SPORT': return {...state, activeSport: action.sport};
+    case 'SET_DATE': return {...state, activeDate: action.date};
+    case 'SET_MATCH_TAB': return {...state, activeMatchTab: action.tab};
+    case 'SET_LEAGUE_TAB': return {...state, activeLeagueTab: action.tab};
+    case 'SET_SEARCH': return {...state, searchQuery: action.query, currentPage: action.query ? 'search' : 'home'};
+    case 'TOGGLE_DARK': return {...state, darkMode: !state.darkMode};
+    case 'TOGGLE_FAV': {
+      const favs = state.favorites.includes(action.id) ? state.favorites.filter(f=>f!==action.id) : [...state.favorites, action.id];
+      return {...state, favorites: favs};
+    }
+    case 'TOGGLE_LEAGUE': return {...state, expandedLeagues:{...state.expandedLeagues, [action.id]: !state.expandedLeagues[action.id]}};
+    case 'GO_HOME': return {...state, currentPage:'home', searchQuery:''};
+    default: return state;
+  }
+}
+
+const AppContext = createContext();
+
+// ==================== ATOMIC COMPONENTS ====================
+const TeamLogo = ({team, size='md'}) => {
+  const sizes = {sm:'w-6 h-6 text-xs',md:'w-9 h-9 text-sm',lg:'w-13 h-13 text-lg',xl:'w-20 h-20 text-2xl'};
+  const short = (team?.shortName || team?.name?.substring(0,3) || '???').substring(0,3);
+  return (
+    <div className={`${sizes[size]} rounded-full flex items-center justify-center font-display font-bold shrink-0`}
+      style={{background:`${team?.color || '#333'}22`, border:`2px solid ${team?.color || '#333'}`, color:team?.color || '#fff'}}>
+      {short}
+    </div>
+  );
+};
+
+const StatusBadge = ({status, minute, quarter}) => {
+  if(status === 'LIVE') return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-2 h-2 rounded-full animate-pulse-live" style={{background:'var(--accent-green)'}}></span>
+      <span className="font-mono text-xs font-medium" style={{color:'var(--accent-green)'}}>{quarter || `${minute}'`}</span>
+    </div>
+  );
+  const colors = {FT:'var(--text-muted)',HT:'var(--accent-amber)',NS:'var(--accent-cyan)',PPD:'var(--text-muted)'};
+  return <span className="font-mono text-xs font-medium" style={{color:colors[status]||'var(--text-muted)'}}>{status}</span>;
+};
+
+const PlayerRatingBadge = ({rating}) => {
+  const color = rating >= 8 ? 'var(--accent-green)' : rating >= 7 ? 'var(--accent-cyan)' : rating >= 6 ? 'var(--text-secondary)' : 'var(--accent-red)';
+  return <span className="font-mono text-xs px-1.5 py-0.5 rounded" style={{background:`${color}22`,color,border:`1px solid ${color}44`}}>{rating.toFixed(1)}</span>;
+};
+
+const FormDots = ({form}) => (
+  <div className="flex gap-1">{(form||[]).map((r,i) => (
+    <span key={i} className="w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold text-white"
+      style={{background: r==='W'?'var(--accent-green)':r==='D'?'var(--text-muted)':'var(--accent-red)', animationDelay:`${i*50}ms`}}>{r}</span>
+  ))}</div>
+);
+
+const StatBar = ({label, home, away, homeColor, awayColor}) => {
+  const total = home + away || 1;
+  const hp = (home/total)*100;
+  const [animated, setAnimated] = useState(false);
+  useEffect(()=>{const t=setTimeout(()=>setAnimated(true),100);return()=>clearTimeout(t);},[]);
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <span className="font-mono text-sm w-12 text-right" style={{color:'var(--text-primary)'}}>{typeof home==='number'&&home%1!==0?home.toFixed(1):home}{label.includes('%')?'%':''}</span>
+      <div className="flex-1 h-2 rounded-full overflow-hidden flex" style={{background:'var(--bg-elevated)'}}>
+        <div className="h-full rounded-l-full stat-bar-fill" style={{width:animated?`${hp}%`:'0%',background:`linear-gradient(90deg, ${homeColor}, ${homeColor}88)`,transition:'width 0.8s ease'}}></div>
+        <div className="h-full rounded-r-full stat-bar-fill" style={{width:animated?`${100-hp}%`:'0%',background:`linear-gradient(90deg, ${awayColor}88, ${awayColor})`,transition:'width 0.8s ease'}}></div>
+      </div>
+      <span className="font-mono text-sm w-12" style={{color:'var(--text-primary)'}}>{typeof away==='number'&&away%1!==0?away.toFixed(1):away}{label.includes('%')?'%':''}</span>
+    </div>
+  );
+};
+
+// ==================== LIVE SCORE TICKER ====================
+const LiveScoreTicker = () => {
+  const liveMatches = MATCHES.filter(m => m.status === 'LIVE' || m.status === 'HT' || m.status === 'FT');
+  const tickerContent = liveMatches.map(m => `${m.homeTeam.shortName} ${m.homeScore}–${m.awayScore} ${m.awayTeam.shortName} ${m.status==='LIVE'?(m.quarter||m.minute+"'"):m.status}`).join('   ·   ');
+  return (
+    <div className="h-10 flex items-center overflow-hidden relative" style={{background:'#000814',borderBottom:'1px solid var(--accent-cyan)'}}>
+      <div className="flex whitespace-nowrap ticker-animate">
+        <span className="font-mono text-xs px-4" style={{color:'var(--text-secondary)'}}>{tickerContent}   ·   {tickerContent}   ·   {tickerContent}   ·   {tickerContent}</span>
+      </div>
+    </div>
+  );
+};
+
+// ==================== NAVBAR ====================
+const Navbar = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const [searchOpen, setSearchOpen] = useState(false);
+  return (
+    <nav className="sticky top-0 z-50 h-15 flex items-center px-4 md:px-6 gap-4" style={{background:'rgba(6,11,24,0.95)',backdropFilter:'blur(20px)',borderBottom:'1px solid var(--border-subtle)'}}>
+      <button onClick={()=>dispatch({type:'GO_HOME'})} className="font-display font-bold text-xl gradient-text cursor-pointer">DEMO</button>
+      <div className="hidden md:flex items-center gap-6 ml-8">
+        {['Scores','Leagues','Teams','Players'].map(n=>(
+          <button key={n} className="text-sm font-medium cursor-pointer transition-colors hover:text-white" style={{color:state.currentPage===(n==='Scores'?'home':n.toLowerCase())?'var(--accent-cyan)':'var(--text-secondary)'}}
+            onClick={()=>dispatch({type:'SET_PAGE',page:n==='Scores'?'home':n.toLowerCase()})}>{n}</button>
+        ))}
+      </div>
+      <div className="flex-1"></div>
+      <div className="flex items-center gap-3">
+        {searchOpen ? (
+          <input autoFocus className="bg-transparent border rounded-lg px-3 py-1.5 text-sm outline-none w-48 transition-all" style={{borderColor:'var(--accent-cyan)',color:'var(--text-primary)'}}
+            placeholder="Search..." value={state.searchQuery} onChange={e=>dispatch({type:'SET_SEARCH',query:e.target.value})} onBlur={()=>!state.searchQuery&&setSearchOpen(false)} />
+        ) : (
+          <button onClick={()=>setSearchOpen(true)} className="text-lg cursor-pointer" style={{color:'var(--text-secondary)'}}>🔍</button>
+        )}
+        <button onClick={()=>dispatch({type:'TOGGLE_DARK'})} className="text-lg cursor-pointer" style={{color:'var(--text-secondary)'}}>{state.darkMode?'🌙':'☀️'}</button>
+        <span className="text-lg" style={{color:'var(--text-secondary)'}}>🔔</span>
+      </div>
+    </nav>
+  );
+};
+
+// ==================== SPORT TAB BAR ====================
+const SportTabBar = () => {
+  const {state, dispatch} = useContext(AppContext);
+  return (
+    <div className="flex gap-2 px-4 py-3 overflow-x-auto hide-scrollbar" style={{background:'var(--bg-base)'}}>
+      {SPORTS.map(s=>(
+        <button key={s.id} onClick={()=>dispatch({type:'SET_SPORT',sport:s.id})}
+          className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all shrink-0"
+          style={state.activeSport===s.id?{background:'linear-gradient(135deg, #00D4FF, #6C63FF)',color:'#fff',boxShadow:'0 0 20px rgba(0,212,255,0.3)'}:{background:'var(--bg-card)',color:'var(--text-secondary)',border:'1px solid var(--border-subtle)'}}>
+          <span>{s.emoji}</span>{s.label}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// ==================== DATE NAVIGATOR ====================
+const DateNavigator = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const dates = ['Yesterday','Today','Tomorrow','Jun 13','Jun 14','Jun 15','Jun 16'];
+  return (
+    <div className="flex gap-2 px-4 py-2 overflow-x-auto hide-scrollbar">
+      {dates.map((d,i)=>(
+        <button key={d} onClick={()=>dispatch({type:'SET_DATE',date:d.toLowerCase()})}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap cursor-pointer transition-all"
+          style={d.toLowerCase()===state.activeDate?{color:'var(--accent-cyan)',borderBottom:'2px solid var(--accent-cyan)'}:{color:'var(--text-muted)'}}>{d}</button>
+      ))}
+    </div>
+  );
+};
+
+// ==================== MATCH CARD ====================
+const MatchCard = ({match}) => {
+  const {state, dispatch} = useContext(AppContext);
+  const isFav = state.favorites.includes(match.id);
+  const goalScorers = (side) => match.events?.filter(e=>e.type==='goal'&&e.team===side).map(e=>e.player).join(', ');
+  return (
+    <div className="glass-card rounded-xl px-4 py-3 cursor-pointer group" style={{borderLeft:`3px solid ${match.homeTeam.color}`}}
+      onClick={()=>dispatch({type:'VIEW_MATCH',id:match.id})}>
+      <div className="flex items-center gap-3">
+        <div className="w-14 text-center shrink-0">
+          <StatusBadge status={match.status} minute={match.minute} quarter={match.quarter} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <TeamLogo team={match.homeTeam} size="sm" />
+              <span className="text-sm font-medium truncate" style={{color:'var(--text-primary)'}}>{match.homeTeam.name}</span>
+              {match.events?.some(e=>e.type==='yellow_card'&&e.team==='home') && <span className="w-2 h-2 rounded-full" style={{background:'var(--accent-amber)'}}></span>}
+            </div>
+            <span className={`font-display font-bold text-lg mx-3 ${match.status==='LIVE'?'animate-score-pop':''}`} style={{color:'var(--text-score)'}}>
+              {match.status==='NS'?match.time:`${match.homeScore} - ${match.awayScore}`}
+            </span>
+            <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+              {match.events?.some(e=>e.type==='yellow_card'&&e.team==='away') && <span className="w-2 h-2 rounded-full" style={{background:'var(--accent-amber)'}}></span>}
+              <span className="text-sm font-medium truncate text-right" style={{color:'var(--text-primary)'}}>{match.awayTeam.name}</span>
+              <TeamLogo team={match.awayTeam} size="sm" />
+            </div>
+          </div>
+          {match.status !== 'NS' && goalScorers('home') && (
+            <div className="text-[10px] mt-1 truncate" style={{color:'var(--text-muted)'}}>⚽ {goalScorers('home')}</div>
+          )}
+        </div>
+        <button onClick={e=>{e.stopPropagation();dispatch({type:'TOGGLE_FAV',id:match.id})}} className="text-lg cursor-pointer shrink-0">{isFav?'★':'☆'}</button>
+      </div>
+    </div>
+  );
+};
+
+// ==================== FEATURED MATCH HERO ====================
+const FeaturedMatchHero = ({match}) => {
+  const {dispatch} = useContext(AppContext);
+  if(!match) return null;
+  return (
+    <div className="rounded-2xl p-6 mb-6 cursor-pointer relative overflow-hidden animate-fade-up"
+      style={{background:`linear-gradient(135deg, ${match.homeTeam.color}33, var(--bg-card), ${match.awayTeam.color}33)`,border:'1px solid var(--border-subtle)'}}
+      onClick={()=>dispatch({type:'VIEW_MATCH',id:match.id})}>
+      <div className="absolute inset-0 opacity-5" style={{backgroundImage:'repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(255,255,255,0.1) 20px, rgba(255,255,255,0.1) 21px)'}}></div>
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-4">
+          <span>{match.competition.logo}</span>
+          <span className="text-xs font-medium" style={{color:'var(--text-secondary)'}}>{match.competition.name}</span>
+          <StatusBadge status={match.status} minute={match.minute} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="text-center flex-1">
+            <TeamLogo team={match.homeTeam} size="lg" />
+            <div className="font-display font-bold text-lg mt-2" style={{color:'var(--text-primary)'}}>{match.homeTeam.name}</div>
+          </div>
+          <div className="text-center px-6">
+            <div className="font-display font-extrabold text-5xl md:text-6xl animate-score-pop" style={{color:'var(--text-score)'}}>
+              {match.homeScore} - {match.awayScore}
+            </div>
+            <div className="text-xs mt-2" style={{color:'var(--text-muted)'}}>{match.venue}</div>
+          </div>
+          <div className="text-center flex-1">
+            <TeamLogo team={match.awayTeam} size="lg" />
+            <div className="font-display font-bold text-lg mt-2" style={{color:'var(--text-primary)'}}>{match.awayTeam.name}</div>
+          </div>
+        </div>
+        {match.stats && (
+          <div className="flex justify-center gap-8 mt-4">
+            {[['Possession',match.stats.possession],['Shots',match.stats.shots],['xG',match.stats.xG]].map(([label,vals])=>(
+              <div key={label} className="text-center">
+                <div className="text-[10px] mb-1" style={{color:'var(--text-muted)'}}>{label}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs" style={{color:match.homeTeam.color}}>{Array.isArray(vals)?vals[0]:''}</span>
+                  <div className="w-16 h-1.5 rounded-full overflow-hidden flex" style={{background:'var(--bg-elevated)'}}>
+                    <div style={{width:`${Array.isArray(vals)?(vals[0]/(vals[0]+vals[1]||1))*100:50}%`,background:match.homeTeam.color}} className="h-full"></div>
+                    <div style={{width:`${Array.isArray(vals)?(vals[1]/(vals[0]+vals[1]||1))*100:50}%`,background:match.awayTeam.color}} className="h-full"></div>
+                  </div>
+                  <span className="font-mono text-xs" style={{color:match.awayTeam.color}}>{Array.isArray(vals)?vals[1]:''}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==================== LEAGUE MATCH GROUP ====================
+const LeagueMatchGroup = ({competition, matches}) => {
+  const {state, dispatch} = useContext(AppContext);
+  const isExpanded = state.expandedLeagues[competition.id] !== false;
+  return (
+    <div className="mb-4 animate-fade-up">
+      <button className="flex items-center gap-2 px-4 py-2.5 w-full cursor-pointer rounded-lg mb-2 transition-colors"
+        style={{background:'var(--bg-card)'}} onClick={()=>dispatch({type:'TOGGLE_LEAGUE',id:competition.id})}>
+        <span>{competition.logo}</span>
+        <span className="text-sm font-semibold cursor-pointer" style={{color:'var(--text-primary)'}} onClick={e=>{e.stopPropagation();dispatch({type:'VIEW_LEAGUE',id:competition.id})}}>{competition.name}</span>
+        <span className="text-xs" style={{color:'var(--text-muted)'}}>{competition.country}</span>
+        <span className="ml-auto text-xs" style={{color:'var(--text-muted)'}}>{isExpanded?'▲':'▼'}</span>
+      </button>
+      {isExpanded && <div className="space-y-2">{matches.map(m=><MatchCard key={m.id} match={m} />)}</div>}
+    </div>
+  );
+};
+
+// ==================== TRENDING PANEL ====================
+const TrendingPanel = () => {
+  const {dispatch} = useContext(AppContext);
+  return (
+    <div className="space-y-4">
+      <div className="glass-card rounded-xl p-4">
+        <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>🔥 Trending Now</h3>
+        {MATCHES.filter(m=>m.status==='LIVE').slice(0,3).map(m=>(
+          <div key={m.id} className="flex items-center justify-between py-2 cursor-pointer" style={{borderBottom:'1px solid var(--border-subtle)'}}
+            onClick={()=>dispatch({type:'VIEW_MATCH',id:m.id})}>
+            <div className="text-xs">
+              <span style={{color:'var(--text-primary)'}}>{m.homeTeam.shortName}</span>
+              <span className="font-display font-bold mx-2" style={{color:'var(--text-score)'}}>{m.homeScore}-{m.awayScore}</span>
+              <span style={{color:'var(--text-primary)'}}>{m.awayTeam.shortName}</span>
+            </div>
+            <StatusBadge status={m.status} minute={m.minute} quarter={m.quarter} />
+          </div>
+        ))}
+      </div>
+      <div className="glass-card rounded-xl p-4">
+        <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>🏆 Top Scorers</h3>
+        {TOP_SCORERS.slice(0,5).map(s=>(
+          <div key={s.rank} className="flex items-center gap-2 py-1.5 cursor-pointer" onClick={()=>{
+            const pid = Object.keys(PLAYERS).find(k=>PLAYERS[k].name===s.player);
+            if(pid) dispatch({type:'VIEW_PLAYER',id:pid});
+          }}>
+            <span className="font-mono text-xs w-5" style={{color:'var(--text-muted)'}}>{s.rank}</span>
+            <span className="text-xs flex-1 truncate" style={{color:'var(--text-primary)'}}>{s.player}</span>
+            <span className="font-display font-bold text-sm" style={{color:'var(--accent-cyan)'}}>{s.goals}</span>
+          </div>
+        ))}
+      </div>
+      <div className="glass-card rounded-xl p-4">
+        <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>📅 Upcoming</h3>
+        {MATCHES.filter(m=>m.status==='NS').slice(0,3).map(m=>(
+          <div key={m.id} className="py-2 cursor-pointer" style={{borderBottom:'1px solid var(--border-subtle)'}}
+            onClick={()=>dispatch({type:'VIEW_MATCH',id:m.id})}>
+            <div className="text-xs" style={{color:'var(--text-secondary)'}}>{m.homeTeam.shortName} vs {m.awayTeam.shortName}</div>
+            <div className="text-[10px]" style={{color:'var(--text-muted)'}}>{m.date} · {m.time}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ==================== HOME PAGE ====================
+const HomePage = () => {
+  const {state} = useContext(AppContext);
+  const sportMatches = MATCHES.filter(m => m.sport === state.activeSport);
+  const featured = sportMatches.find(m => m.isFeatured);
+  const grouped = {};
+  sportMatches.forEach(m => {
+    const cid = m.competition.id;
+    if(!grouped[cid]) grouped[cid] = {competition: m.competition, matches: []};
+    grouped[cid].matches.push(m);
+  });
+  const favMatches = MATCHES.filter(m => state.favorites.includes(m.id));
+  return (
+    <div className="flex gap-6 px-4 md:px-6 py-4 max-w-7xl mx-auto">
+      <div className="flex-1 min-w-0">
+        {favMatches.length > 0 && (
+          <div className="mb-6">
+            <h2 className="font-display font-bold text-sm mb-3 flex items-center gap-2" style={{color:'var(--accent-amber)'}}>★ My Favorites</h2>
+            <div className="space-y-2">{favMatches.map(m=><MatchCard key={m.id} match={m} />)}</div>
+          </div>
+        )}
+        <FeaturedMatchHero match={featured} />
+        {Object.values(grouped).map(g => <LeagueMatchGroup key={g.competition.id} competition={g.competition} matches={g.matches} />)}
+      </div>
+      <div className="hidden lg:block w-72 shrink-0"><TrendingPanel /></div>
+    </div>
+  );
+};
+
+// ==================== MATCH DETAIL PAGE ====================
+const MatchTimeline = ({match}) => {
+  const events = [...(match.events||[])].sort((a,b)=>a.minute-b.minute);
+  return (
+    <div className="relative py-4">
+      <div className="absolute left-1/2 top-0 bottom-0 w-px" style={{background:'var(--border-subtle)'}}></div>
+      {events.map((e,i) => {
+        const isHome = e.team === 'home';
+        const icon = e.type==='goal'?'⚽':e.type==='yellow_card'?'🟨':e.type==='red_card'?'🟥':e.type==='substitution'?'🔄':'⭐';
+        return (
+          <div key={i} className={`flex items-center gap-3 py-2 ${isHome?'flex-row':'flex-row-reverse'}`} style={{animationDelay:`${i*100}ms`}}>
+            <div className={`flex-1 ${isHome?'text-right':'text-left'}`}>
+              <span className="text-sm font-medium" style={{color:'var(--text-primary)'}}>{e.player}</span>
+              {e.assist && <span className="text-xs ml-1" style={{color:'var(--text-muted)'}}>({e.assist})</span>}
+              {e.playerOn && <span className="text-xs" style={{color:'var(--accent-green)'}}> ↑ {e.playerOn}</span>}
+              {e.playerOff && <span className="text-xs" style={{color:'var(--accent-red)'}}> ↓ {e.playerOff}</span>}
+            </div>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm z-10" style={{background:'var(--bg-card)',border:'2px solid var(--border-subtle)'}}>
+              <span className="text-xs">{icon}</span>
+            </div>
+            <div className="flex-1">
+              <span className="font-mono text-xs px-2 py-0.5 rounded" style={{background:'var(--bg-elevated)',color:'var(--accent-cyan)'}}>{e.minute}'</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const MatchCommentary = ({match}) => {
+  const comments = match.commentary || [];
+  if(!comments.length) return null;
+  return (
+    <div className="mt-6">
+      <h4 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>💬 Commentary</h4>
+      {comments.map((c,i) => (
+        <div key={i} className="flex gap-3 py-2.5 px-3 rounded-lg mb-1" style={{background:i%2===0?'var(--bg-card)':'transparent'}}>
+          <span className="font-mono text-xs shrink-0 w-8" style={{color:'var(--accent-cyan)'}}>{c.minute}'</span>
+          <span className="text-xs" style={{color:'var(--text-secondary)'}}>{c.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const MatchStats = ({match}) => {
+  const stats = match.stats;
+  if(!stats) return null;
+  const statList = [
+    ['Possession %', stats.possession],['Shots', stats.shots],['Shots on Target', stats.shotsOnTarget],
+    ['xG', stats.xG],['Passes', stats.passes],['Pass Accuracy %', stats.passAccuracy],
+    ['Corners', stats.corners],['Fouls', stats.fouls],['Yellow Cards', stats.yellowCards],
+    ['Offsides', stats.offsides],['Saves', stats.saves]
+  ];
+  return (
+    <div className="py-4">
+      {statList.map(([label, vals]) => (
+        <div key={label}>
+          <div className="text-center text-xs mb-1" style={{color:'var(--text-muted)'}}>{label}</div>
+          <StatBar label={label} home={vals[0]} away={vals[1]} homeColor={match.homeTeam.color} awayColor={match.awayTeam.color} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const PitchFormation = ({match}) => {
+  const positionMap = {
+    GK: {top:'88%'}, RB:{top:'70%',left:'85%'}, CB:{top:'70%'}, LB:{top:'70%',left:'15%'},
+    CM:{top:'48%'}, CDM:{top:'58%'}, CAM:{top:'38%'}, RM:{top:'48%',left:'85%'}, LM:{top:'48%',left:'15%'},
+    RW:{top:'25%',left:'85%'}, LW:{top:'25%',left:'15%'}, ST:{top:'15%'}, CF:{top:'20%'},
+  };
+  const getPositions = (players) => {
+    const byPos = {};
+    players.forEach(p => { if(!byPos[p.position]) byPos[p.position]=[]; byPos[p.position].push(p); });
+    const result = [];
+    Object.entries(byPos).forEach(([pos, pls]) => {
+      const base = positionMap[pos] || {top:'50%'};
+      pls.forEach((p, i) => {
+        const spread = pls.length > 1 ? (i / (pls.length - 1)) * 60 + 20 : 50;
+        result.push({...p, style: {top: base.top, left: base.left || `${spread}%`}});
+      });
+    });
+    return result;
+  };
+  return (
+    <div className="py-4">
+      <div className="text-center text-sm mb-4" style={{color:'var(--text-secondary)'}}>
+        {match.lineups?.home?.formation || '4-3-3'} vs {match.lineups?.away?.formation || '4-3-3'}
+      </div>
+      <div className="relative rounded-xl overflow-hidden" style={{background:'#1a3d2b',height:'400px',border:'2px solid rgba(255,255,255,0.2)'}}>
+        <div className="absolute inset-0" style={{background:'repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(255,255,255,0.08) 49px, rgba(255,255,255,0.08) 50px)'}}></div>
+        <div className="absolute top-1/2 left-0 right-0 h-px" style={{background:'rgba(255,255,255,0.2)'}}></div>
+        <div className="absolute top-1/2 left-1/2 w-20 h-20 rounded-full -translate-x-1/2 -translate-y-1/2" style={{border:'1px solid rgba(255,255,255,0.2)'}}></div>
+        {/* Home team - bottom half */}
+        {match.lineups?.home?.players?.map((p, i) => {
+          const positions = getPositions(match.lineups.home.players);
+          const pp = positions[i];
+          if(!pp) return null;
+          return (
+            <div key={`h${i}`} className="absolute flex flex-col items-center" style={{top:`${50 + parseFloat(pp.style.top)/2}%`, left:pp.style.left, transform:'translate(-50%,-50%)'}}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{background:match.homeTeam.color}}>{p.number}</div>
+              <span className="text-[9px] mt-0.5 text-white font-medium whitespace-nowrap">{p.name.split(' ').pop()}</span>
+              <PlayerRatingBadge rating={p.rating} />
+            </div>
+          );
+        })}
+        {/* Away team - top half */}
+        {match.lineups?.away?.players?.map((p, i) => {
+          const positions = getPositions(match.lineups.away.players);
+          const pp = positions[i];
+          if(!pp) return null;
+          return (
+            <div key={`a${i}`} className="absolute flex flex-col items-center" style={{top:`${parseFloat(pp.style.top)/2}%`, left:pp.style.left, transform:'translate(-50%,-50%)'}}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{background:match.awayTeam.color}}>{p.number}</div>
+              <span className="text-[9px] mt-0.5 text-white font-medium whitespace-nowrap">{p.name.split(' ').pop()}</span>
+              <PlayerRatingBadge rating={p.rating} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const H2HTab = ({match}) => {
+  const h2h = match.h2h || [];
+  if(!h2h.length) return <div className="py-8 text-center text-sm" style={{color:'var(--text-muted)'}}>No head-to-head data available</div>;
+  const wins = {home:0,away:0,draw:0};
+  h2h.forEach(m => { if(m.result==='H') wins.home++; else if(m.result==='A') wins.away++; else wins.draw++; });
+  return (
+    <div className="py-4">
+      <div className="flex justify-center gap-6 mb-6">
+        <div className="text-center"><div className="font-display font-bold text-2xl" style={{color:match.homeTeam.color}}>{wins.home}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>Wins</div></div>
+        <div className="text-center"><div className="font-display font-bold text-2xl" style={{color:'var(--text-muted)'}}>{wins.draw}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>Draws</div></div>
+        <div className="text-center"><div className="font-display font-bold text-2xl" style={{color:match.awayTeam.color}}>{wins.away}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>Wins</div></div>
+      </div>
+      {h2h.map((m,i) => (
+        <div key={i} className="glass-card rounded-lg p-3 mb-2 flex items-center justify-between">
+          <span className="text-xs" style={{color:'var(--text-muted)'}}>{m.date}</span>
+          <span className="text-sm font-medium" style={{color:'var(--text-primary)'}}>{m.home} {m.score} {m.away}</span>
+          <span className="text-xs px-2 py-0.5 rounded font-bold" style={{background:m.result==='H'?'var(--accent-green)22':m.result==='A'?'var(--accent-red)22':'var(--text-muted)22',color:m.result==='H'?'var(--accent-green)':m.result==='A'?'var(--accent-red)':'var(--text-muted)'}}>{m.result}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const StandingsTab = ({match, leagueId}) => {
+  const cid = leagueId || match?.competition?.id;
+  if(cid !== 'epl') return <div className="py-8 text-center text-sm" style={{color:'var(--text-muted)'}}>Standings available for Premier League</div>;
+  const {dispatch} = useContext(AppContext);
+  return (
+    <div className="py-4 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead><tr style={{color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)'}}>
+          <th className="text-left py-2 px-1 w-8">#</th><th className="text-left py-2">Team</th>
+          <th className="text-center py-2 w-8">P</th><th className="text-center py-2 w-8">W</th>
+          <th className="text-center py-2 w-8">D</th><th className="text-center py-2 w-8">L</th>
+          <th className="text-center py-2 w-8">GD</th><th className="text-center py-2 w-10 font-bold">Pts</th>
+          <th className="text-center py-2 hidden md:table-cell">Form</th>
+        </tr></thead>
+        <tbody>{EPL_TABLE.map(row => {
+          const isPlaying = match && (row.team === match.homeTeam?.name || row.team === match.awayTeam?.name);
+          const teamData = TEAMS[row.id];
+          const borderColor = isPlaying ? (row.team===match?.homeTeam?.name?match.homeTeam.color:match?.awayTeam?.color) : row.pos<=4?'#00D4FF33':row.pos>=18?'#FF475733':'transparent';
+          return (
+            <tr key={row.pos} className="cursor-pointer transition-colors" style={{borderLeft:`3px solid ${borderColor}`,background:isPlaying?'var(--bg-elevated)':'transparent'}}
+              onClick={()=>teamData&&dispatch({type:'VIEW_TEAM',id:row.id})}>
+              <td className="py-2 px-1 font-mono" style={{color:'var(--text-muted)'}}>{row.pos}</td>
+              <td className="py-2 font-medium" style={{color:'var(--text-primary)'}}>{row.team}</td>
+              <td className="text-center py-2" style={{color:'var(--text-secondary)'}}>{row.played}</td>
+              <td className="text-center py-2" style={{color:'var(--text-secondary)'}}>{row.won}</td>
+              <td className="text-center py-2" style={{color:'var(--text-secondary)'}}>{row.drawn}</td>
+              <td className="text-center py-2" style={{color:'var(--text-secondary)'}}>{row.lost}</td>
+              <td className="text-center py-2 font-mono" style={{color:row.gd>0?'var(--accent-green)':row.gd<0?'var(--accent-red)':'var(--text-muted)'}}>{row.gd>0?'+':''}{row.gd}</td>
+              <td className="text-center py-2 font-display font-bold" style={{color:'var(--text-primary)'}}>{row.pts}</td>
+              <td className="text-center py-2 hidden md:table-cell"><FormDots form={row.form} /></td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </div>
+  );
+};
+
+const MatchDetailPage = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const match = MATCHES.find(m => m.id === state.selectedMatchId);
+  if(!match) return <div className="p-8 text-center" style={{color:'var(--text-muted)'}}>Match not found</div>;
+  const tabs = ['summary','stats','lineups','h2h','standings'];
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 animate-fade-up">
+      <button onClick={()=>dispatch({type:'GO_HOME'})} className="text-sm mb-4 cursor-pointer flex items-center gap-1" style={{color:'var(--accent-cyan)'}}>← Back</button>
+      {/* Match Header */}
+      <div className="rounded-2xl p-6 mb-4 relative overflow-hidden" style={{background:`radial-gradient(circle at 25% 50%, ${match.homeTeam.color}22, transparent 60%), radial-gradient(circle at 75% 50%, ${match.awayTeam.color}22, transparent 60%), var(--bg-card)`,border:'1px solid var(--border-subtle)',minHeight:'200px'}}>
+        <div className="text-center mb-2">
+          <span className="text-xs" style={{color:'var(--text-muted)'}}>{match.competition.logo} {match.competition.name}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="text-center flex-1 cursor-pointer" onClick={()=>dispatch({type:'VIEW_TEAM',id:match.homeTeam.id})}>
+            <TeamLogo team={match.homeTeam} size="xl" />
+            <div className="font-display font-bold text-lg mt-2" style={{color:'var(--text-primary)',textShadow:`0 0 20px ${match.homeTeam.color}44`}}>{match.homeTeam.name}</div>
+          </div>
+          <div className="text-center px-4">
+            <div className="font-display font-extrabold text-6xl md:text-7xl" style={{color:'var(--text-score)'}}>{match.homeScore} - {match.awayScore}</div>
+            <StatusBadge status={match.status} minute={match.minute} quarter={match.quarter} />
+            {match.status === 'LIVE' && (
+              <div className="w-32 h-1 rounded-full mt-2 mx-auto" style={{background:'var(--bg-elevated)'}}>
+                <div className="h-full rounded-full" style={{width:`${(match.minute/90)*100}%`,background:'var(--accent-green)'}}></div>
+              </div>
+            )}
+          </div>
+          <div className="text-center flex-1 cursor-pointer" onClick={()=>dispatch({type:'VIEW_TEAM',id:match.awayTeam.id})}>
+            <TeamLogo team={match.awayTeam} size="xl" />
+            <div className="font-display font-bold text-lg mt-2" style={{color:'var(--text-primary)',textShadow:`0 0 20px ${match.awayTeam.color}44`}}>{match.awayTeam.name}</div>
+          </div>
+        </div>
+        <div className="text-center mt-3 text-xs" style={{color:'var(--text-muted)'}}>{match.venue} · {match.date} · {match.time}</div>
+      </div>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 overflow-x-auto hide-scrollbar" style={{borderBottom:'1px solid var(--border-subtle)'}}>
+        {tabs.map(t=>(
+          <button key={t} onClick={()=>dispatch({type:'SET_MATCH_TAB',tab:t})}
+            className="px-4 py-2.5 text-sm font-medium capitalize cursor-pointer transition-all whitespace-nowrap"
+            style={state.activeMatchTab===t?{color:'var(--accent-cyan)',borderBottom:'2px solid var(--accent-cyan)'}:{color:'var(--text-muted)'}}>{t}</button>
+        ))}
+      </div>
+      {/* Tab Content */}
+      {state.activeMatchTab === 'summary' && <><MatchTimeline match={match} /><MatchCommentary match={match} /></>}
+      {state.activeMatchTab === 'stats' && <MatchStats match={match} />}
+      {state.activeMatchTab === 'lineups' && <PitchFormation match={match} />}
+      {state.activeMatchTab === 'h2h' && <H2HTab match={match} />}
+      {state.activeMatchTab === 'standings' && <StandingsTab match={match} />}
+    </div>
+  );
+};
+
+// ==================== LEAGUE PAGE ====================
+const LeaguePage = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const league = COMPETITIONS[state.selectedLeagueId];
+  if(!league) return <div className="p-8 text-center" style={{color:'var(--text-muted)'}}>League not found</div>;
+  const leagueMatches = MATCHES.filter(m => m.competition.id === league.id);
+  const tabs = ['standings','fixtures','results','top scorers'];
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 animate-fade-up">
+      <button onClick={()=>dispatch({type:'GO_HOME'})} className="text-sm mb-4 cursor-pointer flex items-center gap-1" style={{color:'var(--accent-cyan)'}}>← Back</button>
+      <div className="rounded-2xl p-6 mb-6" style={{background:`linear-gradient(135deg, ${league.color}44, var(--bg-card))`,border:'1px solid var(--border-subtle)'}}>
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">{league.logo}</span>
+          <div>
+            <h1 className="font-display font-bold text-2xl" style={{color:'var(--text-primary)'}}>{league.name}</h1>
+            <span className="text-sm" style={{color:'var(--text-secondary)'}}>{league.country} · 2025/26 Season</span>
+          </div>
+        </div>
+        <div className="flex gap-6 mt-4">
+          {[['Teams','20'],['Matches',leagueMatches.length],['Goals',leagueMatches.reduce((a,m)=>a+m.homeScore+m.awayScore,0)]].map(([l,v])=>(
+            <div key={l}><div className="font-display font-bold text-xl" style={{color:'var(--accent-cyan)'}}>{v}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{l}</div></div>
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-1 mb-4 overflow-x-auto hide-scrollbar" style={{borderBottom:'1px solid var(--border-subtle)'}}>
+        {tabs.map(t=>(
+          <button key={t} onClick={()=>dispatch({type:'SET_LEAGUE_TAB',tab:t})}
+            className="px-4 py-2.5 text-sm font-medium capitalize cursor-pointer transition-all whitespace-nowrap"
+            style={state.activeLeagueTab===t?{color:'var(--accent-cyan)',borderBottom:'2px solid var(--accent-cyan)'}:{color:'var(--text-muted)'}}>{t}</button>
+        ))}
+      </div>
+      {state.activeLeagueTab === 'standings' && <StandingsTab match={null} leagueId={league.id} />}
+      {state.activeLeagueTab === 'fixtures' && (
+        <div className="space-y-2">{leagueMatches.filter(m=>m.status==='NS').map(m=><MatchCard key={m.id} match={m} />)}
+          {leagueMatches.filter(m=>m.status==='NS').length===0 && <div className="py-8 text-center text-sm" style={{color:'var(--text-muted)'}}>No upcoming fixtures</div>}
+        </div>
+      )}
+      {state.activeLeagueTab === 'results' && (
+        <div className="space-y-2">{leagueMatches.filter(m=>m.status==='FT').map(m=><MatchCard key={m.id} match={m} />)}</div>
+      )}
+      {state.activeLeagueTab === 'top scorers' && (
+        <div className="py-4">{TOP_SCORERS.map(s=>(
+          <div key={s.rank} className="flex items-center gap-3 py-3 px-3 rounded-lg mb-1 cursor-pointer" style={{background:s.rank===1?'var(--bg-elevated)':'transparent',borderLeft:s.rank===1?'3px solid var(--accent-amber)':'3px solid transparent'}}
+            onClick={()=>{const pid=Object.keys(PLAYERS).find(k=>PLAYERS[k].name===s.player);if(pid)dispatch({type:'VIEW_PLAYER',id:pid});}}>
+            <span className="font-mono text-sm w-6" style={{color:s.rank===1?'var(--accent-amber)':'var(--text-muted)'}}>{s.rank===1?'🏆':s.rank}</span>
+            <div className="flex-1">
+              <div className="text-sm font-medium" style={{color:'var(--text-primary)'}}>{s.player}</div>
+              <div className="text-xs" style={{color:'var(--text-muted)'}}>{s.team}</div>
+            </div>
+            <div className="text-right">
+              <span className="font-display font-bold text-lg" style={{color:'var(--accent-cyan)'}}>{s.goals}</span>
+              <span className="text-xs ml-2" style={{color:'var(--text-muted)'}}>{s.assists}A · {s.matches}M</span>
+            </div>
+          </div>
+        ))}</div>
+      )}
+    </div>
+  );
+};
+
+// ==================== TEAM PAGE ====================
+const TeamPage = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const team = TEAMS[state.selectedTeamId];
+  if(!team) return <div className="p-8 text-center" style={{color:'var(--text-muted)'}}>Team not found</div>;
+  const teamMatches = MATCHES.filter(m => m.homeTeam.id === team.id || m.awayTeam.id === team.id);
+  const tableRow = EPL_TABLE.find(r => r.id === team.id);
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 animate-fade-up">
+      <button onClick={()=>dispatch({type:'GO_HOME'})} className="text-sm mb-4 cursor-pointer flex items-center gap-1" style={{color:'var(--accent-cyan)'}}>← Back</button>
+      <div className="rounded-2xl p-6 mb-6" style={{background:`linear-gradient(135deg, ${team.color}22, var(--bg-card))`,border:'1px solid var(--border-subtle)'}}>
+        <div className="flex items-center gap-4">
+          <TeamLogo team={team} size="xl" />
+          <div>
+            <h1 className="font-display font-bold text-2xl" style={{color:'var(--text-primary)'}}>{team.name}</h1>
+            <div className="text-sm" style={{color:'var(--text-secondary)'}}>{team.country} · {team.stadium}</div>
+            <div className="text-xs" style={{color:'var(--text-muted)'}}>Founded {team.founded} · Manager: {team.manager}</div>
+          </div>
+        </div>
+        {tableRow && (
+          <div className="flex gap-6 mt-4">
+            {[['Position',tableRow.pos],['Played',tableRow.played],['W/D/L',`${tableRow.won}/${tableRow.drawn}/${tableRow.lost}`],['GD',tableRow.gd>0?`+${tableRow.gd}`:tableRow.gd],['Points',tableRow.pts]].map(([l,v])=>(
+              <div key={l}><div className="font-display font-bold text-lg" style={{color:'var(--accent-cyan)'}}>{v}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{l}</div></div>
+            ))}
+          </div>
+        )}
+      </div>
+      {tableRow && (
+        <div className="mb-6">
+          <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>Recent Form</h3>
+          <div className="flex gap-2"><FormDots form={tableRow.form} /></div>
+        </div>
+      )}
+      <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>Matches</h3>
+      <div className="space-y-2">{teamMatches.map(m=><MatchCard key={m.id} match={m} />)}</div>
+      {teamMatches.length === 0 && <div className="py-8 text-center text-sm" style={{color:'var(--text-muted)'}}>No matches found</div>}
+    </div>
+  );
+};
+
+// ==================== PLAYER PAGE ====================
+const PlayerPage = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const player = PLAYERS[state.selectedPlayerId];
+  if(!player) return <div className="p-8 text-center" style={{color:'var(--text-muted)'}}>Player not found</div>;
+  const team = TEAMS[player.teamId];
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 animate-fade-up">
+      <button onClick={()=>dispatch({type:'GO_HOME'})} className="text-sm mb-4 cursor-pointer flex items-center gap-1" style={{color:'var(--accent-cyan)'}}>← Back</button>
+      <div className="rounded-2xl p-6 mb-6" style={{background:`linear-gradient(135deg, ${team?.color||'#333'}22, var(--bg-card))`,border:'1px solid var(--border-subtle)'}}>
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center font-display font-extrabold text-3xl" style={{background:`${team?.color||'#333'}33`,color:team?.color||'#fff',border:`3px solid ${team?.color||'#333'}`}}>{player.number}</div>
+          <div>
+            <h1 className="font-display font-bold text-2xl" style={{color:'var(--text-primary)'}}>{player.name}</h1>
+            <div className="text-sm" style={{color:'var(--text-secondary)'}}>{player.nationality} {player.position} · {player.team}</div>
+            <div className="text-xs" style={{color:'var(--text-muted)'}}>Age {player.age}</div>
+          </div>
+        </div>
+        <div className="flex gap-6 mt-4">
+          {[['Goals',player.stats.goals],['Assists',player.stats.assists],['Matches',player.stats.matches],['Avg Rating',player.stats.avgRating.toFixed(1)]].map(([l,v])=>(
+            <div key={l}><div className="font-display font-bold text-xl" style={{color:'var(--accent-cyan)'}}>{v}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{l}</div></div>
+          ))}
+        </div>
+      </div>
+      {/* Radar-like stats */}
+      <div className="glass-card rounded-xl p-4 mb-6">
+        <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>Attributes</h3>
+        {['shooting','passing','dribbling','defending','pace','physical'].map(attr=>(
+          <div key={attr} className="flex items-center gap-3 py-1.5">
+            <span className="text-xs capitalize w-20" style={{color:'var(--text-secondary)'}}>{attr}</span>
+            <div className="flex-1 h-2 rounded-full" style={{background:'var(--bg-elevated)'}}>
+              <div className="h-full rounded-full transition-all duration-700" style={{width:`${player.stats[attr]}%`,background:player.stats[attr]>=80?'var(--accent-green)':player.stats[attr]>=60?'var(--accent-cyan)':'var(--accent-amber)'}}></div>
+            </div>
+            <span className="font-mono text-xs w-8" style={{color:'var(--text-primary)'}}>{player.stats[attr]}</span>
+          </div>
+        ))}
+      </div>
+      {/* Recent Matches */}
+      <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-primary)'}}>Recent Matches</h3>
+      <div className="space-y-2">
+        {player.recentMatches?.map((m,i)=>(
+          <div key={i} className="glass-card rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium" style={{color:'var(--text-primary)'}}>vs {m.vs}</span>
+              <span className="text-xs ml-2" style={{color:'var(--text-muted)'}}>{m.score}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {m.goals > 0 && <span className="text-xs">⚽×{m.goals}</span>}
+              {m.assists > 0 && <span className="text-xs">🅰️×{m.assists}</span>}
+              <PlayerRatingBadge rating={m.rating} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ==================== SEARCH PAGE ====================
+const SearchPage = () => {
+  const {state, dispatch} = useContext(AppContext);
+  const q = state.searchQuery.toLowerCase();
+  const matchResults = MATCHES.filter(m => m.homeTeam.name.toLowerCase().includes(q) || m.awayTeam.name.toLowerCase().includes(q));
+  const teamResults = Object.values(TEAMS).filter(t => t.name.toLowerCase().includes(q));
+  const playerResults = Object.values(PLAYERS).filter(p => p.name.toLowerCase().includes(q));
+  const leagueResults = Object.values(COMPETITIONS).filter(c => c.name.toLowerCase().includes(q));
+  const noResults = !matchResults.length && !teamResults.length && !playerResults.length && !leagueResults.length;
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 animate-fade-up">
+      <div className="mb-6">
+        <input autoFocus className="w-full bg-transparent text-xl font-display font-bold outline-none py-3" style={{color:'var(--text-primary)',borderBottom:'2px solid var(--accent-cyan)'}}
+          placeholder="Search teams, players, leagues..." value={state.searchQuery} onChange={e=>dispatch({type:'SET_SEARCH',query:e.target.value})} />
+      </div>
+      {noResults && q && <div className="py-12 text-center" style={{color:'var(--text-muted)'}}><div className="text-4xl mb-3">🔍</div>No results found for "{state.searchQuery}"</div>}
+      {leagueResults.length > 0 && (
+        <div className="mb-6">
+          <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-secondary)'}}>Competitions</h3>
+          {leagueResults.map(l=>(
+            <div key={l.id} className="glass-card rounded-lg p-3 mb-2 flex items-center gap-3 cursor-pointer" onClick={()=>dispatch({type:'VIEW_LEAGUE',id:l.id})}>
+              <span className="text-xl">{l.logo}</span>
+              <div><div className="text-sm font-medium" style={{color:'var(--text-primary)'}}>{l.name}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{l.country}</div></div>
+            </div>
+          ))}
+        </div>
+      )}
+      {teamResults.length > 0 && (
+        <div className="mb-6">
+          <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-secondary)'}}>Teams</h3>
+          {teamResults.map(t=>(
+            <div key={t.id} className="glass-card rounded-lg p-3 mb-2 flex items-center gap-3 cursor-pointer" onClick={()=>dispatch({type:'VIEW_TEAM',id:t.id})}>
+              <TeamLogo team={t} size="sm" />
+              <div><div className="text-sm font-medium" style={{color:'var(--text-primary)'}}>{t.name}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{t.country}</div></div>
+            </div>
+          ))}
+        </div>
+      )}
+      {playerResults.length > 0 && (
+        <div className="mb-6">
+          <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-secondary)'}}>Players</h3>
+          {playerResults.map(p=>(
+            <div key={p.id} className="glass-card rounded-lg p-3 mb-2 flex items-center gap-3 cursor-pointer" onClick={()=>dispatch({type:'VIEW_PLAYER',id:p.id})}>
+              <span className="text-xl">{p.nationality}</span>
+              <div><div className="text-sm font-medium" style={{color:'var(--text-primary)'}}>{p.name}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{p.team} · {p.position}</div></div>
+            </div>
+          ))}
+        </div>
+      )}
+      {matchResults.length > 0 && (
+        <div className="mb-6">
+          <h3 className="font-display font-bold text-sm mb-3" style={{color:'var(--text-secondary)'}}>Matches</h3>
+          {matchResults.map(m=><MatchCard key={m.id} match={m} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ==================== APP ====================
+const App = () => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  return (
+    <AppContext.Provider value={{state, dispatch}}>
+      <div className={`min-h-screen bg-grid ${state.darkMode?'':'light-mode'}`} style={{background:'var(--bg-base)',color:'var(--text-primary)'}}>
+        <LiveScoreTicker />
+        <Navbar />
+        {state.currentPage === 'home' && <><SportTabBar /><DateNavigator /><HomePage /></>}
+        {state.currentPage === 'match' && <MatchDetailPage />}
+        {state.currentPage === 'league' && <LeaguePage />}
+        {state.currentPage === 'team' && <TeamPage />}
+        {state.currentPage === 'player' && <PlayerPage />}
+        {state.currentPage === 'search' && <SearchPage />}
+      </div>
+    </AppContext.Provider>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
